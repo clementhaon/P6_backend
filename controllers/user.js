@@ -1,24 +1,38 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const cryptojs = require('crypto-js');
 
 const User = require('../models/user');
+require('dotenv').config();
 
 exports.signup = (req, res, next) => {
-    bcrypt.hash(req.body.password, 10)
+
+  const regexEmail = /^[\w_-]+@[\w-]+\.[a-z]{2,4}$/i;
+
+  if (regexEmail.test(req.body.email)){
+      
+      bcrypt.hash(req.body.password, 10)
+
       .then(hash => {
-        const user = new User({
-          email: req.body.email,
-          password: hash
-        });
-        user.save()
-          .then(() => res.status(201).json({ message: 'Utilisateur créé !' }))
-          .catch(error => res.status(400).json({ error }));
+          const user = new User({
+              email: cryptojs.HmacSHA256(req.body.email, process.env.EMAIL_KEY).toString(),
+              password: hash
+          });
+          user.save()
+              .then(() => res.status(201).json({ message: 'Utilisateur créé !'}))
+              .catch( error => res.status(400).json({ error }));
       })
       .catch(error => res.status(500).json({ error }));
-  };
+  }
+
+  else {
+      res.status(400).json({ message : 'Email invalide'})
+  }
+};
 
   exports.login = (req, res, next) => {
-    User.findOne({ email: req.body.email })
+    const cryptedEmail = cryptojs.HmacSHA256(req.body.email, process.env.EMAIL_KEY).toString();
+    User.findOne( { email: cryptedEmail })
       .then(user => {
         if (!user) {
           return res.status(401).json({ error: 'Utilisateur non trouvé !' });
@@ -32,7 +46,7 @@ exports.signup = (req, res, next) => {
               userId: user._id,
               token: jwt.sign(
                 { userId: user._id },
-                'RANDOM_TOKEN_SECRET',
+                process.env.TOKEN_KEY,
                 { expiresIn: '24h' }
               )
             });
